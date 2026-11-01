@@ -1,256 +1,107 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import type { Track, Playlist, DownloadedTrackRecord } from '../types/music';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { Track, Playlist } from '../types/music';
 import { StorageService } from '../services/storage';
-import { OfflineStorage } from '../services/offlineStorage';
-import { useAuth } from './AuthContext';
 
 interface LibraryContextType {
   likedTracks: Track[];
   playlists: Playlist[];
   recentlyPlayed: Track[];
-  downloadedTracks: DownloadedTrackRecord[];
-  downloadingTrackIds: Set<string>;
-  isOnline: boolean;
-  totalDownloadSize: number;
-  toggleLike: (track: Track) => void;
   isLiked: (trackId: string) => boolean;
-  createPlaylist: (name: string, description?: string) => Playlist;
-  renamePlaylist: (id: string, newName: string) => void;
-  deletePlaylist: (id: string) => void;
-  addTrackToPlaylist: (playlistId: string, track: Track) => void;
-  removeTrackFromPlaylist: (playlistId: string, trackId: string) => void;
-  refreshRecent: () => void;
-  clearHistory: () => void;
-  downloadTrack: (track: Track) => Promise<void>;
-  removeDownload: (trackId: string) => Promise<void>;
-  isDownloaded: (trackId: string) => boolean;
-  openDownloadsFolder: () => Promise<boolean>;
-  refreshDownloads: () => Promise<void>;
+  toggleLike: (track: Track) => Promise<void>;
+  createPlaylist: (name: string, description?: string) => Promise<Playlist>;
+  deletePlaylist: (id: string) => Promise<void>;
+  addTrackToPlaylist: (playlistId: string, track: Track) => Promise<void>;
+  removeTrackFromPlaylist: (playlistId: string, trackId: string) => Promise<void>;
+  refreshLibrary: () => Promise<void>;
 }
 
 const LibraryContext = createContext<LibraryContextType | null>(null);
 
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const userId = user?.id || 'guest';
-  const userIdRef = useRef<string>(userId);
-  userIdRef.current = userId;
+  const [likedTracks, setLikedTracks] = useState<Track[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>([]);
 
-  // Network online/offline state
-  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
-
-  // Core library states scoped to active account
-  const [likedTracks, setLikedTracks] = useState<Track[]>(() => StorageService.getLikedTracks(userId));
-  const [playlists, setPlaylists] = useState<Playlist[]>(() => StorageService.getPlaylists(userId));
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(() => StorageService.getRecentlyPlayed(userId));
-  const [downloadedTracks, setDownloadedTracks] = useState<DownloadedTrackRecord[]>([]);
-  const [downloadingTrackIds, setDownloadingTrackIds] = useState<Set<string>>(new Set());
-  const [totalDownloadSize, setTotalDownloadSize] = useState<number>(0);
-
-  // Fetch downloaded tracks from IndexedDB
-  const loadDownloadedTracks = useCallback(async () => {
-    try {
-      const records = await OfflineStorage.getAllTracks(userIdRef.current);
-      setDownloadedTracks(records);
-      const totalSize = records.reduce((acc, r) => acc + (r.fileSize || 0), 0);
-      setTotalDownloadSize(totalSize);
-    } catch (e) {
-      console.warn('Failed to load downloaded tracks from IndexedDB:', e);
-    }
+  const refreshLibrary = useCallback(async () => {
+    const [liked, pls, recent] = await Promise.all([
+      StorageService.getLikedTracks(),
+      StorageService.getPlaylists(),
+      StorageService.getRecentlyPlayed(),
+    ]);
+    setLikedTracks(liked);
+    setPlaylists(pls);
+    setRecentlyPlayed(recent);
   }, []);
 
-  // Reload data when active user changes (switching account or login/logout)
   useEffect(() => {
-    setLikedTracks(StorageService.getLikedTracks(userId));
-    setPlaylists(StorageService.getPlaylists(userId));
-    setRecentlyPlayed(StorageService.getRecentlyPlayed(userId));
-    loadDownloadedTracks();
-  }, [userId, loadDownloadedTracks]);
-
-  // Online / offline window listeners
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      setLikedTracks(StorageService.getLikedTracks(userIdRef.current));
-      setRecentlyPlayed(StorageService.getRecentlyPlayed(userIdRef.current));
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // Listen for storage and custom events without self-referential loops
-  useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key?.includes('soundwave_recent_tracks')) {
-        setRecentlyPlayed(StorageService.getRecentlyPlayed(userIdRef.current));
-      } else if (e.key?.includes('soundwave_liked_tracks')) {
-        setLikedTracks(StorageService.getLikedTracks(userIdRef.current));
-      }
-    };
-
-    const handleRecentEvent = () => {
-      setRecentlyPlayed(StorageService.getRecentlyPlayed(userIdRef.current));
-    };
-
-    const handleDownloadsEvent = () => {
-      loadDownloadedTracks();
-    };
-
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('soundwave_recent_updated', handleRecentEvent);
-    window.addEventListener('soundwave_downloads_updated', handleDownloadsEvent);
-
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('soundwave_recent_updated', handleRecentEvent);
-      window.removeEventListener('soundwave_downloads_updated', handleDownloadsEvent);
-    };
-  }, [loadDownloadedTracks]);
-
-  const refreshRecent = useCallback(() => {
-    setRecentlyPlayed(StorageService.getRecentlyPlayed(userIdRef.current));
-  }, []);
-
-  const clearHistory = useCallback(() => {
-    StorageService.clearRecentlyPlayed(userIdRef.current);
-    setRecentlyPlayed([]);
-  }, []);
+    refreshLibrary();
+  }, [refreshLibrary]);
 
   const isLiked = useCallback((trackId: string): boolean => {
     return likedTracks.some(t => t.id === trackId);
   }, [likedTracks]);
 
-  const toggleLike = useCallback((track: Track) => {
-    setLikedTracks(prev => {
-      const exists = prev.some(t => t.id === track.id);
-      const updated = exists
-        ? prev.filter(t => t.id !== track.id)
-        : [{ ...track, playedAt: new Date().toISOString() }, ...prev];
-      StorageService.saveLikedTracks(updated, userIdRef.current);
-      return updated;
-    });
-  }, []);
+  const toggleLike = useCallback(async (track: Track) => {
+    const exists = likedTracks.some(t => t.id === track.id);
+    let updated: Track[];
+    if (exists) {
+      updated = likedTracks.filter(t => t.id !== track.id);
+    } else {
+      updated = [track, ...likedTracks];
+    }
+    setLikedTracks(updated);
+    await StorageService.saveLikedTracks(updated);
+  }, [likedTracks]);
 
-  const createPlaylist = useCallback((name: string, description?: string): Playlist => {
+  const createPlaylist = useCallback(async (name: string, description?: string): Promise<Playlist> => {
     const newPlaylist: Playlist = {
-      id: `pl-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      id: `pl-${Date.now()}`,
       name: name.trim() || 'My Playlist',
-      description: description || 'Created with SoundWave',
-      artwork: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
+      description: description || 'Created on mobile',
+      artwork: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=60',
       tracks: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    setPlaylists(prev => {
-      const updated = [newPlaylist, ...prev];
-      StorageService.savePlaylists(updated, userIdRef.current);
-      return updated;
-    });
+    const updated = [newPlaylist, ...playlists];
+    setPlaylists(updated);
+    await StorageService.savePlaylists(updated);
     return newPlaylist;
-  }, []);
+  }, [playlists]);
 
-  const renamePlaylist = useCallback((id: string, newName: string) => {
-    setPlaylists(prev => {
-      const updated = prev.map(pl =>
-        pl.id === id
-          ? { ...pl, name: newName.trim(), updatedAt: new Date().toISOString() }
-          : pl
-      );
-      StorageService.savePlaylists(updated, userIdRef.current);
-      return updated;
+  const deletePlaylist = useCallback(async (id: string) => {
+    const updated = playlists.filter(p => p.id !== id);
+    setPlaylists(updated);
+    await StorageService.savePlaylists(updated);
+  }, [playlists]);
+
+  const addTrackToPlaylist = useCallback(async (playlistId: string, track: Track) => {
+    const updated = playlists.map(p => {
+      if (p.id !== playlistId) return p;
+      if (p.tracks.some(t => t.id === track.id)) return p;
+      return {
+        ...p,
+        tracks: [...p.tracks, track],
+        updatedAt: new Date().toISOString(),
+      };
     });
-  }, []);
+    setPlaylists(updated);
+    await StorageService.savePlaylists(updated);
+  }, [playlists]);
 
-  const deletePlaylist = useCallback((id: string) => {
-    setPlaylists(prev => {
-      const updated = prev.filter(pl => pl.id !== id);
-      StorageService.savePlaylists(updated, userIdRef.current);
-      return updated;
+  const removeTrackFromPlaylist = useCallback(async (playlistId: string, trackId: string) => {
+    const updated = playlists.map(p => {
+      if (p.id !== playlistId) return p;
+      return {
+        ...p,
+        tracks: p.tracks.filter(t => t.id !== trackId),
+        updatedAt: new Date().toISOString(),
+      };
     });
-  }, []);
-
-  const addTrackToPlaylist = useCallback((playlistId: string, track: Track) => {
-    setPlaylists(prev => {
-      const updated = prev.map(pl => {
-        if (pl.id !== playlistId) return pl;
-        if (pl.tracks.some(t => t.id === track.id)) return pl;
-        return {
-          ...pl,
-          tracks: [...pl.tracks, track],
-          updatedAt: new Date().toISOString(),
-          artwork: pl.tracks.length === 0 ? track.artwork : pl.artwork,
-        };
-      });
-      StorageService.savePlaylists(updated, userIdRef.current);
-      return updated;
-    });
-  }, []);
-
-  const removeTrackFromPlaylist = useCallback((playlistId: string, trackId: string) => {
-    setPlaylists(prev => {
-      const updated = prev.map(pl => {
-        if (pl.id !== playlistId) return pl;
-        return {
-          ...pl,
-          tracks: pl.tracks.filter(t => t.id !== trackId),
-          updatedAt: new Date().toISOString(),
-        };
-      });
-      StorageService.savePlaylists(updated, userIdRef.current);
-      return updated;
-    });
-  }, []);
-
-  // Offline Downloads Management
-  const isDownloaded = useCallback((trackId: string): boolean => {
-    return downloadedTracks.some(r => r.id === trackId);
-  }, [downloadedTracks]);
-
-  const downloadTrack = useCallback(async (track: Track) => {
-    if (downloadingTrackIds.has(track.id)) return;
-
-    setDownloadingTrackIds(prev => new Set(prev).add(track.id));
-    try {
-      await OfflineStorage.downloadTrack(track, userIdRef.current);
-      await loadDownloadedTracks();
-    } catch (err) {
-      console.error('Download failed:', err);
-      throw err;
-    } finally {
-      setDownloadingTrackIds(prev => {
-        const next = new Set(prev);
-        next.delete(track.id);
-        return next;
-      });
-    }
-  }, [downloadingTrackIds, loadDownloadedTracks]);
-
-  const removeDownload = useCallback(async (trackId: string) => {
-    try {
-      await OfflineStorage.deleteTrack(trackId);
-      await loadDownloadedTracks();
-    } catch (err) {
-      console.warn('Failed to remove download:', err);
-    }
-  }, [loadDownloadedTracks]);
-
-  const openDownloadsFolder = useCallback(async (): Promise<boolean> => {
-    return OfflineStorage.openDownloadsFolder();
-  }, []);
-
-  const refreshDownloads = useCallback(async () => {
-    await loadDownloadedTracks();
-  }, [loadDownloadedTracks]);
+    setPlaylists(updated);
+    await StorageService.savePlaylists(updated);
+  }, [playlists]);
 
   return (
     <LibraryContext.Provider
@@ -258,24 +109,13 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         likedTracks,
         playlists,
         recentlyPlayed,
-        downloadedTracks,
-        downloadingTrackIds,
-        isOnline,
-        totalDownloadSize,
-        toggleLike,
         isLiked,
+        toggleLike,
         createPlaylist,
-        renamePlaylist,
         deletePlaylist,
         addTrackToPlaylist,
         removeTrackFromPlaylist,
-        refreshRecent,
-        clearHistory,
-        downloadTrack,
-        removeDownload,
-        isDownloaded,
-        openDownloadsFolder,
-        refreshDownloads,
+        refreshLibrary,
       }}
     >
       {children}
@@ -283,10 +123,10 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 };
 
-export const useLibrary = (): LibraryContextType => {
+export const useLibrary = () => {
   const context = useContext(LibraryContext);
   if (!context) {
-    throw new Error('useLibrary must be used within a LibraryProvider');
+    throw new Error('useLibrary must be used within LibraryProvider');
   }
   return context;
 };

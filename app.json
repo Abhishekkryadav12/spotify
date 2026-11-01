@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "SoundWave",
+    "slug": "soundwave-spotify",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#121212"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#121212"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

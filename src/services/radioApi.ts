@@ -81,5 +81,22 @@ export const RadioApi = {
       }
     }
     return [];
+  },
+
+  async getStationsByCountry(country: string, limit = 15): Promise<RadioStation[]> {
+    if (!country.trim()) return [];
+    for (const server of RADIO_API_SERVERS) {
+      try {
+        const res = await fetch(`${server}/json/stations/bycountry/${encodeURIComponent(country.trim())}?limit=${limit}&hidebroken=true`);
+        if (!res.ok) continue;
+        const data: RawRadioStation[] = await res.json();
+        return data
+          .filter(s => s.url && (s.codec === 'MP3' || s.codec === 'AAC' || s.url.endsWith('.mp3')))
+          .map(mapRawToRadioStation);
+      } catch (err) {
+        console.warn(`Radio API country search failed on ${server}:`, err);
+      }
+    }
+    return [];
   }
 };

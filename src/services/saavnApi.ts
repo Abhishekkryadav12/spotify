@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type { Track } from '../types/music';
 
 const searchCache = new Map<string, { data: Track[]; timestamp: number }>();
@@ -101,42 +102,76 @@ export const SaavnApi = {
       return cached.data;
     }
 
-    try {
-      // First try via Vite proxy, fallback to direct port 5000 if needed
-      const endpoints = [
-        `/api/saavn/search?query=${encodeURIComponent(trimmed)}`,
-        `http://127.0.0.1:5000/search?query=${encodeURIComponent(trimmed)}`,
-      ];
+    // Host machine IP handling for Android emulator vs iOS simulator vs local/web
+    const host = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
 
-      for (const endpoint of endpoints) {
-        try {
-          const res = await fetch(endpoint, {
-            headers: { Accept: 'application/json' },
-          });
+    const endpoints = [
+      `http://${host}:5000/search?query=${encodeURIComponent(trimmed)}`,
+      `http://127.0.0.1:5000/search?query=${encodeURIComponent(trimmed)}`,
+      `http://localhost:5000/search?query=${encodeURIComponent(trimmed)}`,
+      `https://saavn.dev/api/search/songs?query=${encodeURIComponent(trimmed)}`,
+    ];
 
-          if (!res.ok) continue;
+    for (const endpoint of endpoints) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-          const data: SaavnSearchResponse = await res.json();
-          if (data && Array.isArray(data.result)) {
-            const tracks = data.result
-              .filter(song => isValidAudioUrl(song.media_url_default || song.media_url || song.vlink))
-              .slice(0, limit)
-              .map(mapSongToTrack);
+        const res = await fetch(endpoint, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
 
+        if (!res.ok) continue;
+
+        const data: any = await res.json();
+        
+        // Handle local FastAPI backend format
+        if (data && Array.isArray(data.result)) {
+          const tracks = data.result
+            .filter((song: any) => isValidAudioUrl(song.media_url_default || song.media_url || song.vlink))
+            .slice(0, limit)
+            .map(mapSongToTrack);
+
+          if (tracks.length > 0) {
             searchCache.set(cacheKey, { data: tracks, timestamp: Date.now() });
             return tracks;
           }
-        } catch {
-          // Try next endpoint fallback
-          continue;
         }
-      }
 
-      return [];
-    } catch (err) {
-      console.warn('JioSaavn search error:', err);
-      return [];
+        // Handle saavn.dev format
+        if (data?.data?.results && Array.isArray(data.data.results)) {
+          const tracks: Track[] = data.data.results.slice(0, limit).map((s: any) => {
+            const downloadUrl = Array.isArray(s.downloadUrl) 
+              ? (s.downloadUrl.find((u: any) => u.quality === '320kbps')?.url || s.downloadUrl[s.downloadUrl.length - 1]?.url)
+              : '';
+            const img = Array.isArray(s.image) ? s.image[s.image.length - 1]?.url : s.image;
+            return {
+              id: `saavn_${s.id}`,
+              title: cleanHtmlEntities(s.name || s.title || ''),
+              artist: cleanHtmlEntities(s.artists?.primary?.map((a: any) => a.name).join(', ') || 'Various Artists'),
+              album: cleanHtmlEntities(s.album?.name || 'Single'),
+              artwork: img || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop',
+              audioUrl: downloadUrl || '',
+              duration: Number(s.duration) || 180,
+              sourceType: 'saavn',
+              playbackMode: 'full',
+              sourceLabel: 'JioSaavn • Full Song',
+            };
+          }).filter((t: Track) => t.audioUrl.startsWith('http'));
+
+          if (tracks.length > 0) {
+            searchCache.set(cacheKey, { data: tracks, timestamp: Date.now() });
+            return tracks;
+          }
+        }
+      } catch {
+        continue;
+      }
     }
+
+    return [];
   },
 
   /**
@@ -155,7 +190,6 @@ export const SaavnApi = {
     if (track.playbackMode === 'full') return track;
 
     try {
-      // Clean title and get primary artist for highest matching accuracy
       const cleanTitle = track.title
         .replace(/\(feat\..*?\)/i, '')
         .replace(/\[feat\..*?\]/i, '')
@@ -172,7 +206,6 @@ export const SaavnApi = {
       for (const q of queries) {
         const results = await this.searchTracks(q, 5);
         if (results.length > 0) {
-          // Find closest matching title or take first result
           const match = results.find(r => 
             r.title.toLowerCase().includes(cleanTitle.toLowerCase()) || 
             cleanTitle.toLowerCase().includes(r.title.toLowerCase())
@@ -184,7 +217,7 @@ export const SaavnApi = {
             duration: match.duration || track.duration,
             playbackMode: 'full',
             sourceType: 'saavn',
-            sourceLabel: 'JioSaavn • Full Song (Upgraded)',
+            sourceLabel: 'JioSaavn • Full Song',
             artwork: match.artwork || track.artwork,
           };
         }

@@ -30,3 +30,7 @@ dist-ssr
 SoundWave Downloads/
 __pycache__/
 *.py[cod]
+
+# Expo & Mobile
+.expo/
+legacy-web-archive/

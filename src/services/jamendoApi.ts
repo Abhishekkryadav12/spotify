@@ -1,7 +1,7 @@
 import type { Track } from '../types/music';
 
-// Jamendo Client ID can be supplied in .env as VITE_JAMENDO_CLIENT_ID
-const JAMENDO_CLIENT_ID = import.meta.env.VITE_JAMENDO_CLIENT_ID || '';
+// Jamendo Client ID can be supplied in .env as EXPO_PUBLIC_JAMENDO_CLIENT_ID
+const JAMENDO_CLIENT_ID = process.env.EXPO_PUBLIC_JAMENDO_CLIENT_ID || '';
 
 interface JamendoTrackResult {
   id: string;
