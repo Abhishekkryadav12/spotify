@@ -177,8 +177,11 @@ export const LyricsApi = {
     if (saavnSongId) {
       try {
         const endpoints = [
-          `/api/saavn/lyrics/${saavnSongId}`,
+          `http://10.78.142.133:5000/lyrics/${saavnSongId}`,
           `http://127.0.0.1:5000/lyrics/${saavnSongId}`,
+          `http://10.0.2.2:5000/lyrics/${saavnSongId}`,
+          `http://localhost:5000/lyrics/${saavnSongId}`,
+          `/api/saavn/lyrics/${saavnSongId}`,
         ];
 
         for (const ep of endpoints) {
