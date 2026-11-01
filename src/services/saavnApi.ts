@@ -102,11 +102,10 @@ export const SaavnApi = {
       return cached.data;
     }
 
-    // Host machine IP handling for Android emulator vs iOS simulator vs local/web
-    const host = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
-
+    // Host machine IP handling for Android emulator vs physical device vs iOS simulator vs local/web
     const endpoints = [
-      `http://${host}:5000/search?query=${encodeURIComponent(trimmed)}`,
+      `http://10.78.142.133:5000/search?query=${encodeURIComponent(trimmed)}`,
+      `http://10.0.2.2:5000/search?query=${encodeURIComponent(trimmed)}`,
       `http://127.0.0.1:5000/search?query=${encodeURIComponent(trimmed)}`,
       `http://localhost:5000/search?query=${encodeURIComponent(trimmed)}`,
       `https://saavn.dev/api/search/songs?query=${encodeURIComponent(trimmed)}`,
