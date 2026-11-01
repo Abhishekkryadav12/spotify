@@ -1,0 +1,46 @@
+import type { Track } from '../types/music';
+
+export const DEMO_TRACKS: Track[] = [
+  {
+    id: 'demo-neon-dreams',
+    title: 'Neon Dreams (Extended)',
+    artist: 'SoundWave Originals',
+    album: 'Synthetic Horizons',
+    artwork: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
+    audioUrl: '/audio/neon-dreams.wav',
+    duration: 60,
+    sourceType: 'demo',
+    playbackMode: 'full',
+    genre: 'Synthwave',
+    releaseDate: '2026-01-01',
+    sourceLabel: 'SoundWave Studio (Full Song)',
+  },
+  {
+    id: 'demo-midnight-coffee',
+    title: 'Midnight Coffee (Extended)',
+    artist: 'Lofi Nights',
+    album: 'Coffee & Rain',
+    artwork: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600&auto=format&fit=crop&q=80',
+    audioUrl: '/audio/midnight-coffee.wav',
+    duration: 60,
+    sourceType: 'demo',
+    playbackMode: 'full',
+    genre: 'Lofi / Chillhop',
+    releaseDate: '2026-02-15',
+    sourceLabel: 'SoundWave Studio (Full Song)',
+  },
+  {
+    id: 'demo-deep-space',
+    title: 'Deep Space Ambient (Extended)',
+    artist: 'Celestial Echoes',
+    album: 'Orbital Resonance',
+    artwork: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80',
+    audioUrl: '/audio/deep-space.wav',
+    duration: 60,
+    sourceType: 'demo',
+    playbackMode: 'full',
+    genre: 'Ambient',
+    releaseDate: '2026-03-10',
+    sourceLabel: 'SoundWave Studio (Full Song)',
+  }
+];
